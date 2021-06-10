@@ -1,15 +1,14 @@
 #include "UDP_Server.h"
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
-
-#define PORT    4045
-#define MAXLINE 1024
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#define MAX 80
+#define PORT 4455
+#define SA struct sockaddr
 
 PREPARE_LOGGING(UDP_Server_i)
 
@@ -33,48 +32,61 @@ void UDP_Server_i::constructor()
 
 int UDP_Server_i::serviceFunction()
 {
-	int sockfd;
-        char buffer[MAXLINE];
-	char *buff;
-        char *hello = "Hello from server";
-        struct sockaddr_in servaddr, cliaddr;
+    char buff[MAX];
+    int sockfd, connfd, len;
+    struct sockaddr_in servaddr, cli;
 
-        if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
-                perror("socket creation failed");
-                exit(EXIT_FAILURE);
+        sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        if (sockfd < 0) {
+                printf("socket creation failed...\n");
+                exit(0);
         }
         else
-		LOG_INFO(UDP_Server_i, "Socket created successfully");
+                printf("Socket successfully created..\n");
+        bzero(&servaddr, sizeof(servaddr));
 
-        memset(&servaddr, 0, sizeof(servaddr));
-        memset(&cliaddr, 0, sizeof(cliaddr));
-
-        servaddr.sin_family = AF_INET; // IPv4
-        servaddr.sin_addr.s_addr = INADDR_ANY;
+        servaddr.sin_family = AF_INET;
+        servaddr.sin_addr.s_addr = htons(INADDR_ANY);
         servaddr.sin_port = htons(PORT);
 
-        if ( bind(sockfd, (const struct sockaddr *)&servaddr,
-                        sizeof(servaddr)) < 0 )
-        {
-                perror("bind failed");
-                exit(EXIT_FAILURE);
+        if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
+                printf("socket bind failed...\n");
+                exit(0);
         }
         else
-		LOG_INFO(UDP_Server_i, "Bind is completed");
+                printf("Socket successfully binded..\n");
 
-        int len, n;
+        if ((listen(sockfd, 5)) != 0) {
+                printf("Listen failed...\n");
+                exit(0);
+        }
+        else
+                printf("Server listening..\n");
+        len = sizeof(cli);
 
-        len = sizeof(cliaddr);
+        connfd = accept(sockfd, (SA*)&cli, (socklen_t *)&len);
+        if (connfd < 0) {
+                printf("server acccept failed...\n");
+                exit(0);
+        }
+        else
+                LOG_INFO(UDP_Server_i,"server acccepted the client...");
+    while(1) {
+            bzero(buff, MAX);
+            read(connfd, buff, sizeof(buff));
+            LOG_INFO(UDP_Server_i, "Data Recieved : " << buff);
+            bzero(buff, MAX);
+            strcpy(buff, "Hi, I am Server");
+            write(connfd, buff, sizeof(buff));
 
-        n = recvfrom(sockfd, (char *)buff, MAXLINE, MSG_WAITALL, ( struct sockaddr *) &cliaddr, (socklen_t*)&len);
-	LOG_INFO(UDP_Server_i, "Data Recieved : " << buff);
+            if (strncmp("exit", buff, 4) == 0) {
+                    printf("Server Exit...\n");
+                    break;
+            }
+    }
 
-        buffer[n] = '\0';
-        //printf("Client : %s\n", buff);
+        close(sockfd);
 
-        sendto(sockfd, (const char *)hello, strlen(hello), MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+    return 0;
 
-	LOG_INFO(UDP_Server_i, "Hello message sent");
-        //printf("Hello message sent.\n");
-	return 0;
 }
